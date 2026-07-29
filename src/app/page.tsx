@@ -3,22 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-type SiteType =
-  | 'residential'
-  | 'commercial'
-  | 'park'
-  | 'campus'
-  | 'institutional'
-  | 'other';
-
-type DesignTheme =
-  | 'modern'
-  | 'classical'
-  | 'natural'
-  | 'tropical'
-  | 'japanese'
-  | 'english';
-
 type PlantStyle =
   | 'native'
   | 'mixed'
@@ -30,6 +14,37 @@ type PlantStyle =
 const supportedBaseMapTypes = ['image/jpeg', 'image/png', 'image/webp'];
 const baseMapMaxSize = 1400;
 const baseMapQuality = 0.72;
+const customOptionValue = '__custom__';
+
+const siteTypeOptions = [
+  '校园入口绿地',
+  '城市公园 / 口袋公园',
+  '居住区公共绿地',
+  '商业街区公共空间',
+  '市政广场与开放空间',
+  '滨水绿地',
+  '道路绿带 / 街旁绿地',
+  '屋顶花园 / 庭院绿地',
+  '机构园区绿地',
+];
+
+const designThemeOptions = [
+  '场所文脉与校园记忆',
+  '生态修复与生境营造',
+  '海绵城市与雨洪花园',
+  '低维护乡土植物群落',
+  '四季季相与观花游线',
+  '人本行为与停留空间',
+  '城市更新与口袋公园活力',
+  '中式园林意境与借景',
+  '可持续低碳与韧性景观',
+];
+
+function resolveSelectValue(selectedValue: string, customValue: string) {
+  if (selectedValue !== customOptionValue) return selectedValue;
+
+  return customValue.trim() || '自定义';
+}
 
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -125,8 +140,10 @@ export default function Home() {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
   const [projectName, setProjectName] = useState('');
-  const [siteType, setSiteType] = useState<SiteType>('park');
-  const [designTheme, setDesignTheme] = useState<DesignTheme>('natural');
+  const [siteType, setSiteType] = useState(siteTypeOptions[1]);
+  const [customSiteType, setCustomSiteType] = useState('');
+  const [designTheme, setDesignTheme] = useState(designThemeOptions[1]);
+  const [customDesignTheme, setCustomDesignTheme] = useState('');
   const [plantStyle, setPlantStyle] = useState<PlantStyle>('native');
   const [keepRoads, setKeepRoads] = useState(true);
   const [keepBuildings, setKeepBuildings] = useState(true);
@@ -192,14 +209,21 @@ export default function Home() {
   };
 
   const canGenerate = files.length > 0 && projectName.trim().length > 0;
+  const resolvedSiteType = resolveSelectValue(siteType, customSiteType);
+  const resolvedDesignTheme = resolveSelectValue(
+    designTheme,
+    customDesignTheme,
+  );
 
   const saveProjectState = () => {
     localStorage.setItem(
       'plantingProjectState',
       JSON.stringify({
         projectName,
-        siteType,
-        designTheme,
+        siteType: resolvedSiteType,
+        designTheme: resolvedDesignTheme,
+        selectedSiteType: siteType,
+        selectedDesignTheme: designTheme,
         plantStyle,
         keepRoads,
         keepBuildings,
@@ -257,7 +281,7 @@ export default function Home() {
           </div>
 
           <div className="hidden rounded-full border border-stone-200 bg-stone-50 px-4 py-2 text-sm text-stone-600 md:block">
-            斑块规划 · 季相图 · 群落图 · 剖面图 · 分层图 · 意象图
+            功能分区 · 斑块规划 · 季相图 · 群落图 · 剖面图 · 分层图 · 意象图
           </div>
         </div>
       </header>
@@ -379,18 +403,26 @@ export default function Home() {
                 </label>
                 <select
                   value={siteType}
-                  onChange={(event) =>
-                    setSiteType(event.target.value as SiteType)
-                  }
+                  onChange={(event) => setSiteType(event.target.value)}
                   className="w-full min-w-0 rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-green-600 focus:ring-4 focus:ring-green-100"
                 >
-                  <option value="residential">住宅区</option>
-                  <option value="commercial">商业街区</option>
-                  <option value="park">城市公园</option>
-                  <option value="campus">校园绿地</option>
-                  <option value="institutional">机构园区</option>
-                  <option value="other">其他场地</option>
+                  {siteTypeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                  <option value={customOptionValue}>自定义场地类型</option>
                 </select>
+
+                {siteType === customOptionValue && (
+                  <input
+                    type="text"
+                    value={customSiteType}
+                    onChange={(event) => setCustomSiteType(event.target.value)}
+                    placeholder="例如：老旧小区入口微更新"
+                    className="mt-3 w-full min-w-0 rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-green-600 focus:ring-4 focus:ring-green-100"
+                  />
+                )}
               </div>
 
               <div className="min-w-0">
@@ -399,18 +431,28 @@ export default function Home() {
                 </label>
                 <select
                   value={designTheme}
-                  onChange={(event) =>
-                    setDesignTheme(event.target.value as DesignTheme)
-                  }
+                  onChange={(event) => setDesignTheme(event.target.value)}
                   className="w-full min-w-0 rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-green-600 focus:ring-4 focus:ring-green-100"
                 >
-                  <option value="modern">现代简洁</option>
-                  <option value="classical">古典中式</option>
-                  <option value="natural">自然生态</option>
-                  <option value="tropical">热带风格</option>
-                  <option value="japanese">日式庭园</option>
-                  <option value="english">英式花园</option>
+                  {designThemeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                  <option value={customOptionValue}>自定义设计主题</option>
                 </select>
+
+                {designTheme === customOptionValue && (
+                  <input
+                    type="text"
+                    value={customDesignTheme}
+                    onChange={(event) =>
+                      setCustomDesignTheme(event.target.value)
+                    }
+                    placeholder="例如：儿童友好与自然教育花园"
+                    className="mt-3 w-full min-w-0 rounded-2xl border border-stone-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-green-600 focus:ring-4 focus:ring-green-100"
+                  />
+                )}
               </div>
 
               <div className="md:col-span-2">
@@ -503,6 +545,7 @@ export default function Home() {
 
               <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
                 {[
+                  '功能分区图',
                   '植物规划平面图',
                   '植物季相图',
                   '局部群落图',

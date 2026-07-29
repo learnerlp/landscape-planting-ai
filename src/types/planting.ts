@@ -34,6 +34,7 @@ export type PlantPatch = {
 };
 
 export type DrawingType =
+  | 'functional_zoning'
   | 'planting_plan'
   | 'seasonal_plan'
   | 'community_detail'

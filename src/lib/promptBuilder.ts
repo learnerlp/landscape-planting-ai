@@ -14,6 +14,15 @@ const drawingConfig: Record<
     drawingStyle: string;
   }
 > = {
+  functional_zoning: {
+    title: '功能分区图',
+    baseTask:
+      '生成一张场地功能分区图，先识别上传底图中的红线范围或设计范围，再只在红线范围内划分不同功能区。',
+    plantExpression:
+      '本图以功能空间为主，不做详细植物配置。可用不同柔和色块表达入口形象区、活动草坪区、林下休憩区、花境观赏区、生态雨水区、背景林带等功能空间，并保持边界清晰。',
+    drawingStyle:
+      '采用中国风景园林课程作业常用的总平面功能分区分析图风格，色块柔和、图例清楚、文字少而准确。',
+  },
   planting_plan: {
     title: '植物规划平面图',
     baseTask:

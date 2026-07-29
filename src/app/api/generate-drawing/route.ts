@@ -7,10 +7,12 @@ export const maxDuration = 180;
 type GenerateDrawingRequest = {
   drawingType: DrawingType;
   prompt: string;
+  promptHistory?: string[];
   siteInfo: SiteInfo;
   plantPatches: PlantPatch[];
   baseMapImage?: ReferenceImage;
   plantingPlanImage?: ReferenceImage;
+  previousDrawingImage?: ReferenceImage;
 };
 
 type ReferenceImage =
@@ -187,8 +189,10 @@ function buildReferencePrompt(
     '输入图1是上传底图，输入图2是植物规划平面图。必须以同一个场地方案为依据，保留边界、道路、建筑、水体、植物斑块位置和空间关系。不要脱离底图生成陌生新场地，不要改变布局。少文字，避免乱码。';
 
   const prompts: Record<DrawingType, string> = {
+    functional_zoning:
+      `请基于上传底图生成一张景观设计功能分区图。你需要先自主识别图中的红线范围、用地边界或设计范围；如果图中有明显红线，请严格以红线内作为设计区域，只在红线范围内绘制功能分区，不要在红线外添加设计内容。必须保留原底图的道路、建筑、水体、边界和主要线条，不要改变总平面关系。请在红线范围内根据场地结构合理划分不同功能区，例如入口形象区、开放活动草坪区、林下休憩区、花境观赏区、生态雨水区、安静停留区、背景林带或缓冲绿带等；不同功能区用柔和但可区分的半透明色块表达，边界清晰，色块贴合场地形状和道路关系，不要自由发挥成陌生场地。图面风格为中国风景园林/城市设计课程作业的功能分区分析图，白底清晰，右下角保留简洁中文图例，少量标签，避免乱码。项目信息：${siteSummary}。`,
     planting_plan:
-      '在上传底图上编辑植物规划彩色平面图。严格保留上传底图的场地边界、道路、建筑、水体和主要线条，不要重画底图，不要改变道路和建筑位置。不要生成密集树冠圆圈，不要生成手绘素描树阵。只在可种植区域叠加5-7个大尺度、半透明、柔和水彩植物斑块。植物斑块要有白色细描边，类似景观设计彩平图。右下角保留简洁植物类型图例。少文字，避免乱码。',
+      `输入图1是上传底图，输入图2是前端斑块分区草图。请基于这两张图生成一张正式、完整的景观植物规划彩色总平面图，而不是功能分区图。必须严格保留上传底图的场地边界、道路、建筑、水体和主要线条，不要重画底图，不要改变道路和建筑位置。以输入图2的斑块位置作为植物配置依据，把大色块深化为更完整的植物规划表达：乔木群落、常绿背景、观花乔灌木、灌木、地被、草坪、花境应有层次和细节。可以用疏密变化、柔和水彩肌理、小型植物符号、点状花境和地被纹理表达植物配置，但不要生成密集树冠圆圈，不要生成手绘素描树阵，不要只保留几个半透明大色块。画面应像中国风景园林课程作业的植物规划彩平图，白底清晰，斑块边界与植物类型可读，右下角保留简洁植物图例，少量中文标签，避免乱码。项目信息：${siteSummary}。植物斑块信息：\n${patchSummary}`,
     seasonal_plan:
       `${sharedRules} 生成植物季相图，不要脱离输入图重新设计总平面。输出一张由春、夏、秋、冬4张小平面图组成的四宫格图纸。4张小图必须复用上传底图与输入植物规划平面图中的固定植物斑块位置，场地边界、道路、建筑、水体和斑块轮廓保持一致，不得改变总平面关系；只改变斑块季节色彩和季相点状表达。每个斑块使用像素点或网格状季相纹理，保留清晰平面图纸感：春季花色点缀，夏季浓绿，秋季色叶，冬季常绿骨架和浅色休眠层。课程作业图纸风格，四格布局规整，右下角简洁季相图例，少量中文标题，少文字，避免乱码。植物斑块信息：\n${patchSummary}`,
     community_detail:
@@ -202,6 +206,40 @@ function buildReferencePrompt(
   };
 
   return prompts[drawingType];
+}
+
+function buildSafePrompt(
+  drawingType: DrawingType,
+  plantPatches: PlantPatch[],
+  siteInfo: SiteInfo,
+  userPrompt: string,
+  promptHistory: string[] = [],
+) {
+  const referencePrompt = buildReferencePrompt(drawingType, plantPatches, siteInfo);
+  const trimmedUserPrompt = userPrompt.trim().slice(0, 1600);
+  const historyText = promptHistory
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(-6)
+    .map((item, index) => `${index + 1}. ${item.slice(0, 900)}`)
+    .join('\n');
+
+  if (!trimmedUserPrompt && !historyText) {
+    return referencePrompt;
+  }
+
+  return [
+    referencePrompt,
+    historyText ? '\n【历史修改要求 / 生图记忆】' : null,
+    historyText || null,
+    '',
+    '【用户本次修改要求】',
+    trimmedUserPrompt || '本次未填写新的修改要求，请延续历史修改要求和当前图纸方向。',
+    '',
+    '以上历史修改要求和本次修改要求需要共同生效；如果传入了上一张生成图，请在上一张图的基础上继续优化，而不是重新自由生成。不得违反保留底图、红线范围、道路、建筑、水体、边界和当前方案空间关系的约束。',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export async function POST(request: Request) {
@@ -218,9 +256,23 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json()) as GenerateDrawingRequest;
-  const { drawingType, baseMapImage, plantingPlanImage, plantPatches, siteInfo } =
-    body;
-  const safePrompt = buildReferencePrompt(drawingType, plantPatches, siteInfo);
+  const {
+    drawingType,
+    prompt,
+    promptHistory,
+    baseMapImage,
+    plantingPlanImage,
+    previousDrawingImage,
+    plantPatches,
+    siteInfo,
+  } = body;
+  const safePrompt = buildSafePrompt(
+    drawingType,
+    plantPatches,
+    siteInfo,
+    prompt,
+    promptHistory,
+  );
 
   configureOpenAIProxy();
 
@@ -232,6 +284,8 @@ export async function POST(request: Request) {
   try {
     const baseMapUpload = await readReferenceUpload(baseMapImage);
     const plantingPlanUpload = await readReferenceUpload(plantingPlanImage);
+    const previousDrawingUpload =
+      await readReferenceUpload(previousDrawingImage);
 
     if (!baseMapUpload) {
       return Response.json(
@@ -243,7 +297,11 @@ export async function POST(request: Request) {
       );
     }
 
-    if (drawingType !== 'planting_plan' && !plantingPlanUpload) {
+    if (
+      drawingType !== 'functional_zoning' &&
+      drawingType !== 'planting_plan' &&
+      !plantingPlanUpload
+    ) {
       return Response.json(
         {
           status: 'error',
@@ -254,7 +312,7 @@ export async function POST(request: Request) {
     }
 
     const editImages = await Promise.all(
-      [baseMapUpload, plantingPlanUpload]
+      [baseMapUpload, plantingPlanUpload, previousDrawingUpload]
         .filter((image): image is BaseMapUpload => Boolean(image))
         .map((image) =>
           toFile(image.buffer, image.name, {
@@ -267,7 +325,7 @@ export async function POST(request: Request) {
       await openai.images.edit(
         {
           image: editImages,
-          model: 'gpt-image-1-mini',
+          model: 'gpt-image-2',
           prompt: safePrompt,
           size: '1024x1024',
           quality: 'low',

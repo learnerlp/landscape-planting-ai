@@ -105,6 +105,7 @@ const mockPlantPatches: PlantPatch[] = [
 ];
 
 const drawingTypeLabels: Record<DrawingType, string> = {
+  functional_zoning: 'Functional Zoning',
   planting_plan: 'Planting Plan',
   seasonal_plan: 'Seasonal Plan',
   community_detail: 'Community Detail',
@@ -118,6 +119,7 @@ type DrawingCard = {
   title: string;
   type: string;
   prompt: string;
+  promptHistory: string[];
   status: 'idle' | 'generated' | 'error';
   imageUrl: string;
   createdAt: string;
@@ -211,17 +213,14 @@ function getStoredSiteInfo() {
 function createInitialDrawings(
   siteInfo: SiteInfo,
   plantPatches: PlantPatch[],
-  hasUploadedBaseMap: boolean,
 ): DrawingCard[] {
   return buildAllDrawingPrompts(siteInfo, plantPatches).map((drawing) => ({
     drawingType: drawing.drawingType,
     title: drawing.title,
     type: drawingTypeLabels[drawing.drawingType],
-    prompt: drawing.prompt,
-    status:
-      drawing.drawingType === 'planting_plan' && hasUploadedBaseMap
-        ? 'generated'
-        : 'idle',
+    prompt: '',
+    promptHistory: [],
+    status: 'idle',
     imageUrl: '',
     createdAt: '',
     errorMessage: '',
@@ -276,7 +275,6 @@ const patchPalette = [
 
 const seasonalTitles = ['春季', '夏季', '秋季', '冬季'] as const;
 const localDrawingTypes = [
-  'planting_plan',
   'seasonal_plan',
   'plant_layering',
 ] as const;
@@ -680,7 +678,7 @@ export default function ResultsPage() {
   const [uploadedBaseMap, setUploadedBaseMap] =
     useState<UploadedBaseMap | null>(null);
   const [drawings, setDrawings] = useState(() =>
-    createInitialDrawings(mockSiteInfo, mockPlantPatches, false),
+    createInitialDrawings(mockSiteInfo, mockPlantPatches),
   );
   const [loadingTypes, setLoadingTypes] = useState<Set<DrawingType>>(
     () => new Set(),
@@ -701,11 +699,7 @@ export default function ResultsPage() {
       setCurrentPlantPatches(storedPlantPatches);
       setUploadedBaseMap(storedBaseMap);
       setDrawings(
-        createInitialDrawings(
-          storedSiteInfo,
-          storedPlantPatches,
-          Boolean(storedBaseMap),
-        ),
+        createInitialDrawings(storedSiteInfo, storedPlantPatches),
       );
 
       if (storedBaseMap) {
@@ -777,10 +771,14 @@ export default function ResultsPage() {
         return;
       }
 
-      const plantingPlanImage = await composePlantingPlan(
-        uploadedBaseMap?.dataUrl || '',
-        currentPlantPatches,
-      );
+      const needsPlantingPlanReference =
+        drawing.drawingType !== 'functional_zoning';
+      const plantingPlanImage = needsPlantingPlanReference
+        ? await composePlantingPlan(
+            uploadedBaseMap?.dataUrl || '',
+            currentPlantPatches,
+          )
+        : '';
 
       const response = await fetch('/api/generate-drawing', {
         method: 'POST',
@@ -790,14 +788,24 @@ export default function ResultsPage() {
         body: JSON.stringify({
           drawingType: drawing.drawingType,
           prompt: drawing.prompt,
+          promptHistory: drawing.promptHistory,
           siteInfo: currentSiteInfo,
           plantPatches: currentPlantPatches,
           baseMapImage: uploadedBaseMap,
-          plantingPlanImage: {
-            dataUrl: plantingPlanImage,
-            mimeType: 'image/png',
-            name: 'planting-plan-overlay.png',
-          },
+          plantingPlanImage: needsPlantingPlanReference
+            ? {
+                dataUrl: plantingPlanImage,
+                mimeType: 'image/png',
+                name: 'planting-plan-overlay.png',
+              }
+            : null,
+          previousDrawingImage: drawing.imageUrl
+            ? {
+                dataUrl: drawing.imageUrl,
+                mimeType: 'image/png',
+                name: `${drawing.drawingType}-previous.png`,
+              }
+            : null,
         }),
       });
 
@@ -818,7 +826,10 @@ export default function ResultsPage() {
                 ...item,
                 status: 'generated',
                 imageUrl: data.imageUrl || '',
-                prompt: data.prompt || item.prompt,
+                prompt: '',
+                promptHistory: drawing.prompt.trim()
+                  ? [...item.promptHistory, drawing.prompt.trim()].slice(-6)
+                  : item.promptHistory,
                 createdAt: data.createdAt || new Date().toISOString(),
                 errorMessage: '',
               }
@@ -845,6 +856,19 @@ export default function ResultsPage() {
         return next;
       });
     }
+  };
+
+  const updateDrawingPrompt = (drawingType: DrawingType, prompt: string) => {
+    setDrawings((current) =>
+      current.map((drawing) =>
+        drawing.drawingType === drawingType
+          ? {
+              ...drawing,
+              prompt,
+            }
+          : drawing,
+      ),
+    );
   };
 
   const downloadDrawing = (drawing: DrawingCard) => {
@@ -888,27 +912,6 @@ export default function ResultsPage() {
     }
   };
 
-  const handleOpenLocalPreview = async (drawing: DrawingCard) => {
-    if (!mounted) return;
-
-    try {
-      setSelectedDrawing(await refreshLocalDrawing(drawing));
-    } catch (error) {
-      setDrawings((current) =>
-        current.map((item) =>
-          item.drawingType === drawing.drawingType
-            ? {
-                ...item,
-                status: 'error',
-                errorMessage:
-                  error instanceof Error ? error.message : '叠图生成失败',
-              }
-            : item,
-        ),
-      );
-    }
-  };
-
   return (
     <main className="min-h-screen bg-[#f5f3ee] text-stone-900">
       <header className="border-b border-stone-200 bg-white">
@@ -920,7 +923,7 @@ export default function ResultsPage() {
             植物规划套图生成结果
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-stone-500">
-            当前为植物规划套图结果页，植物规划平面图由底图叠加生成，其余图纸可调用 AI 生成。
+            当前为植物规划套图结果页，功能分区图由 AI 识别红线范围生成，植物规划平面图点击重新生成后由 AI 完善为正式彩平，其余图纸按当前方案生成。
           </p>
         </div>
       </header>
@@ -929,7 +932,6 @@ export default function ResultsPage() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {drawings.map((drawing, index) => {
             const isLoading = loadingTypes.has(drawing.drawingType);
-            const hasUploadedBaseMap = mounted && Boolean(uploadedBaseMap);
 
             return (
               <article
@@ -945,43 +947,6 @@ export default function ResultsPage() {
                       className="h-full w-full bg-cover bg-center"
                       style={{ backgroundImage: `url(${drawing.imageUrl})` }}
                     />
-                  ) : drawing.drawingType === 'planting_plan' &&
-                    hasUploadedBaseMap ? (
-                    <button
-                      type="button"
-                      aria-label="打开植物规划平面图预览"
-                      onClick={() => handleOpenLocalPreview(drawing)}
-                      className="absolute inset-0"
-                    >
-                      <img
-                        src={uploadedBaseMap?.dataUrl}
-                        alt="上传底图"
-                        className="absolute inset-0 h-full w-full bg-white object-contain"
-                      />
-                      {currentPlantPatches.map((patch, patchIndex) => {
-                        const geometry = patchGeometry(patch, patchIndex);
-
-                        return (
-                          <div
-                            key={patch.id}
-                            className="absolute flex items-center justify-center rounded-[38%] border border-white/90 text-center shadow-sm"
-                            style={{
-                              left: `${geometry.x}%`,
-                              top: `${geometry.y}%`,
-                              width: `${geometry.width}%`,
-                              height: `${geometry.height}%`,
-                              transform: `rotate(${geometry.rotation}deg)`,
-                              backgroundColor:
-                                patchPalette[patchIndex % patchPalette.length],
-                            }}
-                          >
-                            <span className="max-w-full truncate rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold text-stone-800">
-                              {patch.id} {patch.name}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </button>
                   ) : (
                     <div className="rounded-2xl border border-green-100 bg-white/80 px-6 py-4 text-center shadow-sm">
                       <p className="text-xs font-medium text-green-700">
@@ -1027,7 +992,7 @@ export default function ResultsPage() {
                     <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
                       {drawing.drawingType === 'planting_plan' &&
                       drawing.status === 'generated'
-                        ? '本地叠加'
+                        ? 'AI完善'
                         : drawing.drawingType === 'seasonal_plan' &&
                             drawing.status === 'generated'
                           ? '本地季相'
@@ -1040,14 +1005,33 @@ export default function ResultsPage() {
                     </span>
                   </div>
 
-                  <details className="mt-5 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <summary className="cursor-pointer text-sm font-semibold text-stone-800">
-                      查看 prompt
-                    </summary>
-                    <p className="mt-3 text-sm leading-6 text-stone-600">
-                      {drawing.prompt}
+                  <div className="mt-5 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                    <label
+                      htmlFor={`prompt-${drawing.drawingType}`}
+                      className="block text-sm font-semibold text-stone-800"
+                    >
+                      本次修改要求
+                    </label>
+                    <textarea
+                      id={`prompt-${drawing.drawingType}`}
+                      value={drawing.prompt}
+                      placeholder="例如：色块再柔和一点，图例放右下角，保留原道路，不要生成密集树冠。"
+                      onChange={(event) =>
+                        updateDrawingPrompt(
+                          drawing.drawingType,
+                          event.target.value,
+                        )
+                      }
+                      className="mt-3 h-32 w-full resize-y rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm leading-6 text-stone-700 outline-none transition focus:border-green-600 focus:ring-4 focus:ring-green-100"
+                    />
+                    <p className="mt-2 text-xs leading-5 text-stone-500">
+                      重新生成时会自动带上内置图纸规则、历史修改要求和上一张生成图。
+                      {drawing.promptHistory.length > 0
+                        ? ` 已记忆 ${drawing.promptHistory.length} 条修改要求。`
+                        : ''}
+                      本地季相图和本地分层图仍按当前斑块数据程序化绘制。
                     </p>
-                  </details>
+                  </div>
 
                   <div className="mt-5 flex gap-3">
                     <button

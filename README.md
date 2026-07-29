@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Landscape Planting AI
+
+AI-assisted landscape planting drawing generator built with Next.js.
+
+## Environment
+
+Create a local environment file before running or deploying:
+
+```bash
+cp .env.example .env.local
+```
+
+Then replace the placeholder value with your own OpenAI API key:
+
+```bash
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+Never commit `.env.local` or any real API key. The repository only includes
+`.env.example` with a placeholder.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies and run the development server:
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+For Vercel or another hosting provider:
 
-## Learn More
+1. Import the GitHub repository.
+2. Set `OPENAI_API_KEY` in the hosting provider's environment variables.
+3. Use the default Next.js build command:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+After pushing to GitHub, a source ZIP can be downloaded from:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```text
+https://github.com/learnerapple/landscape-planting-ai/archive/refs/heads/main.zip
+```
 
-## Deploy on Vercel
+If a deployment branch is used, replace `main` in the URL with that branch name.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev` starts the local development server.
+- `npm run build` creates a production build.
+- `npm run start` starts the production server after building.
+- `npm run lint` runs ESLint.
