@@ -45,7 +45,7 @@ npm run build
 After pushing to GitHub, a source ZIP can be downloaded from:
 
 ```text
-https://github.com/learnerapple/landscape-planting-ai/archive/refs/heads/main.zip
+https://github.com/learnerlp/landscape-planting-ai/archive/refs/heads/main.zip
 ```
 
 If a deployment branch is used, replace `main` in the URL with that branch name.
